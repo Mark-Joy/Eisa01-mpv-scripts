@@ -287,9 +287,19 @@ function get_time_attribute(target_path)
 	return pre_attribute
 end
 
+local clipboard, cb_called, is_paste_specific
+function get_clipboard_callback(clip)
+	clipboard,cb_called = clip,true
+	if is_paste_specific then
+		paste_specific(o.paste_specific_behavior, false)
+	else
+		paste(false)
+	end
+	cb_called = nil
+end
+mp.register_script_message('clipboard-get-reply', get_clipboard_callback)
 
 function get_clipboard()
-	local clipboard
 	if o.device == 'linux' then
 		clipboard = os.capture(o.linux_paste)
 		return clipboard
@@ -310,6 +320,10 @@ function get_clipboard()
 				}]]
 			}
 			return handleres(utils.subprocess({ args =  args, cancellable = false }), args)
+		elseif o.windows_paste == 'mpv-menu-plugin' then
+			if clipboard then return clipboard end
+			mp.commandv('script-message-to', 'menu', 'clipboard/get', mp.get_script_name())
+			return nil
 		elseif o.windows_cmd_in_subprocess then
 			local cmd = {
 				name = 'subprocess',
@@ -358,6 +372,8 @@ function set_clipboard(text)
 					[System.Windows.Clipboard]::SetText('%s')
 				}]], text)
 			} })
+		elseif o.windows_copy == 'mpv-menu-plugin' then
+			mp.commandv('script-message-to', 'menu', 'clipboard/set', text)
 		elseif o.windows_cmd_in_subprocess then
 			local cmd = {
 				name = 'subprocess',
@@ -721,15 +737,16 @@ function multipaste()
 	msg.info(osd_msg)
 end
 
-
-function paste()
+function paste(clear_old_clipboard)
+	is_paste_specific = false
+	if clear_old_clipboard then clipboard = nil end
 	if o.osd_messages == true then
 		mp.osd_message("Pasting...")
 	end
 	msg.info("Pasting...")
 
 	clip = get_clipboard(clip)
-	if not clip then msg.error('Error: clip is null' .. clip) return end
+	if not clip then if cb_called then msg.error('Error: clip is null') end return end
 	clip, clip_file, clip_time, clip_table = parse_clipboard(clip)
 	
 	if #clip_table > 1 then
@@ -802,7 +819,9 @@ function paste()
 end
 
 
-function paste_specific(action)
+function paste_specific(action, clear_old_clipboard)
+	is_paste_specific = true
+	if clear_old_clipboard then clipboard = nil end
 	if not action then return end
 	
 	if o.osd_messages == true then
@@ -811,7 +830,7 @@ function paste_specific(action)
 	msg.info("Pasting...")
 	
 	clip = get_clipboard(clip)
-	if not clip then msg.error('Error: clip is null' .. clip) return end
+	if not clip then if cb_called then msg.error('Error: clip is null') end return end
 	clip, clip_file, clip_time, clip_table = parse_clipboard(clip)
 	
 	if #clip_table > 1 then
@@ -869,7 +888,7 @@ mp.register_event('file-loaded', function()
 	filePath, fileTitle = get_path()
 	if clipboard_pasted == true then
 		clip = get_clipboard(clip)
-		if not clip then msg.error('Error: clip is null' .. clip) return end
+		if not clip then msg.error('Error: clip is null') return end
 		clip, clip_file, clip_time, clip_table = parse_clipboard(clip)
 		
 		if #clip_table > 1 then
@@ -907,5 +926,5 @@ end)
 
 bind_keys(o.copy_keybind, 'copy', copy)
 bind_keys(o.copy_specific_keybind, 'copy-specific', function()copy_specific(o.copy_specific_behavior)end)
-bind_keys(o.paste_keybind, 'paste', paste)
-bind_keys(o.paste_specific_keybind, 'paste-specific', function()paste_specific(o.paste_specific_behavior)end)
+bind_keys(o.paste_keybind, 'paste', function() paste(true) end)
+bind_keys(o.paste_specific_keybind, 'paste-specific', function()paste_specific(o.paste_specific_behavior, true)end)

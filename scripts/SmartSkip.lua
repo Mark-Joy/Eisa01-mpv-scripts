@@ -15,6 +15,7 @@ package.path = package.path .. ";" .. mp.command_native({ "expand-path", "~~/scr
 local sha = require("sha2")
 
 local o = {
+  windows_hash = "msys2",
 	-----Silence Skip Settings-----
 	silence_audio_level = -40,
 	silence_duration = 0.65,
@@ -624,7 +625,7 @@ function command_exists(command, ...)
     if process.status == 0 then
         local command_path = process.stdout:gsub("\n", "")
         msg.debug("command found:", command_path)
-        return {command_path, ...}
+        return {command, ...}
     else
         msg.debug("command not found:", command)
         return nil
@@ -663,7 +664,7 @@ end
 -- Pure lua hash function takes only 1-ms on Intel i3-6100, while powershell takes several
 -- seconds (can be up to 1x secs) on the first run, and an average of 300-ms on subsequent runs
 function hash()
-    local path = mp.get_property("path")
+    local path = detect_os() == "unix" and mp.get_property("path") or mp.get_property("path"):gsub("\\","/")
     if path == nil then
         msg.debug("something is wrong with the path, can't get full_path, can't hash it")
         return
@@ -676,7 +677,7 @@ end
 
 -- Keeping for reference on how to run a shell-command using mpv-subprocess-command
 function subprocess_hash()
-    local path = mp.get_property("path")
+    local path = detect_os() == "unix" and mp.get_property("path") or mp.get_property("path"):gsub("\\","/")
     if path == nil then
         msg.debug("something is wrong with the path, can't get full_path, can't hash it")
         return
@@ -692,16 +693,31 @@ function subprocess_hash()
     local args = nil
 
     local clock = os.clock()
-    if detect_os() == "unix" then
+    if detect_os() == "unix" or o.windows_hash == "msys2" then
         local md5 = command_exists("md5sum") or command_exists("md5") or command_exists("openssl", "md5 | cut -d ' ' -f 2")
         if md5 == nil then
             msg.warn("no md5 command found, can't generate hash")
             return
         end
         md5 = table.concat(md5, " ")
-        cmd["stdin_data"] = path
-        args = {"sh", "-c", md5 .. " | cut -d ' ' -f 1 | tr '[:lower:]' '[:upper:]'" }
-    else --windows
+        if detect_os() == "unix" then
+            cmd["stdin_data"] = path
+            args = {"sh", "-c", md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+        else
+            -- [stdin_data] DOES NOT WORK on windows: https://github.com/mpv-player/mpv/issues/8503
+            -- Use one of these two:
+            args = {"cmd", "/c", "printf '" .. path .. "'| " .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            --args = {"sh",  "-c", 'printf "' .. path .. '"| ' .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            ------------------------------------------------
+            -- [sh -c] DOES WORK, but the below [cmd /c] DOES NOT WORK because [cmd] interprets [printf \"path\"] is different from [printf "path"]
+            --args = {"cmd", "/c", 'printf "' .. path .. '"| ' .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            --args = {"sh",  "-c", 'printf "' .. path .. '"| ' .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            -- [head] [tr] DOES NOT WORK if path is UTF8/Unicode string
+            --args = {"cmd", "/u", "/c", "chcp 65001 & echo ".. path .. "|head -c -2| " .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            --args = {"cmd", "/u", "/c", "chcp 65001 & echo ".. path .. "|tr -d '\\r\\n'| " .. md5 .. " -t | cut -d- -f1 | tr '[:lower:]' '[:upper:]'" }
+            ------------------------------------------------
+        end
+    else -- windows powershell
         -- https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash?view=powershell-7.3
         local hash_command ="$s = [System.IO.MemoryStream]::new(); $w = [System.IO.StreamWriter]::new($s); $w.write(\"" .. path .. "\"); $w.Flush(); $s.Position = 0; Get-FileHash -Algorithm MD5 -InputStream $s | Select-Object -ExpandProperty Hash"
         args = {"powershell", "-NoProfile", "-Command", hash_command}

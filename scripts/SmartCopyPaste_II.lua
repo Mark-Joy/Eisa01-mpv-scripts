@@ -15,6 +15,7 @@ local o = {
 	linux_paste = 'xclip -selection clipboard -o', --paste command that will be used in Linux. OR write a different command
 	mac_copy = 'pbcopy', --copy command that will be used in MAC. OR write a different command
 	mac_paste = 'pbpaste', --paste command that will be used in MAC. OR write a different command
+	windows_cmd_in_subprocess = false, -- run copy and paste commands in subprocess to prevent console flashing
 	windows_copy = 'powershell', --'powershell' is for using windows powershell to copy. OR write the copy command, e.g: ' clip'
 	windows_paste = 'powershell', --'powershell' is for using windows powershell to paste. OR write the paste command
 	auto_run_list_idle = 'none', --Auto run the list when opening mpv and there is no video / file loaded. 'none' for disabled. Or choose between: 'all', 'copy', 'paste', 'recents', 'distinct', 'protocols', 'fileonly', 'titleonly', 'timeonly', 'keywords'.	
@@ -2210,6 +2211,24 @@ function get_clipboard()
 				}]]
 			}
 			return handleres(utils.subprocess({ args =  args, cancellable = false }), args)
+		elseif o.windows_cmd_in_subprocess then
+			local cmd = {
+				name = 'subprocess',
+				capture_stdout = true,
+				playback_only = false,
+			}
+			local args = {}
+			for arg in o.windows_paste:gmatch("%S+") do table.insert(args, arg) end
+			cmd["args"] = args
+			msg.debug("paste cmd:", utils.to_string(cmd))
+			local process = mp.command_native(cmd)
+			if process.status == 0 then
+				clipboard = process.stdout
+				return clipboard
+			else
+				msg.warn("get_clipboard function failed. Set [msg-level=SmartCopyPaste_II=trace] in [mpv.conf] to see trace log")
+				return ''
+			end
 		else
 			clipboard = os.capture(o.windows_paste)
 			return clipboard
@@ -2240,6 +2259,23 @@ function set_clipboard(text)
 					[System.Windows.Clipboard]::SetText('%s')
 				}]], text)
 			} })
+		elseif o.windows_cmd_in_subprocess then
+			local cmd = {
+				name = 'subprocess',
+				capture_stdout = true,
+				playback_only = false,
+			}
+			local args = {}
+			for arg in o.windows_copy:gmatch("%S+") do table.insert(args, arg) end
+			table.insert(args, text)
+			-- Need to escape character [&] in [text]
+			-- args = { "cmd", "/c", "printf '" .. text .. "'| " .. o.windows_copy }
+			cmd["args"] = args
+			msg.debug("copy cmd:", utils.to_string(cmd))
+			local process = mp.command_native(cmd)
+			if process.status ~= 0 then
+				msg.warn("set_clipboard function failed. Set [msg-level=SmartCopyPaste_II=trace] in [mpv.conf] to see trace log")
+			end
 		else
 			pipe = io.popen(o.windows_copy,'w')
 			pipe:write(text)

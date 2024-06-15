@@ -637,7 +637,9 @@ function mkdir(path)
     if detect_os() == "unix" then
         args = {"mkdir", "-p", "--", path}
     else
-        args = {"powershell", "-NoProfile", "-Command", "mkdir", path}
+        path = path:gsub("/","\\")
+        args = {"cmd", "/c", "mkdir", path}
+        --args = {"powershell", "-NoProfile", "-Command", "mkdir", path}
     end
 
     local process = mp.command_native({

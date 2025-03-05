@@ -973,19 +973,20 @@ function Split (s)
     return set
 end
 
+-- https://github.com/mpv-player/mpv/blob/master/options/options.c#L1049
 EXTENSIONS_VIDEO = Set {
     '3g2', '3gp', 'avi', 'flv', 'm2ts', 'm4v', 'mj2', 'mkv', 'mov',
-    'mp4', 'mpeg', 'mpg', 'ogv', 'rmvb', 'webm', 'wmv', 'y4m'
+    'mp4', 'mpeg', 'mpg', 'ogv', 'rmvb', 'ts', 'webm', 'wmv', 'y4m'
 }
 
 EXTENSIONS_AUDIO = Set {
-    'aiff', 'ape', 'au', 'flac', 'm4a', 'mka', 'mp3', 'oga', 'ogg',
-    'ogm', 'opus', 'wav', 'wma'
+    'aac', 'ac3', 'aiff', 'ape', 'au', 'dts', 'eac3', 'flac', 'm4a', 'mka',
+    'mp3', 'oga', 'ogg', 'ogm', 'opus', 'thd', 'wav', 'weba', 'wma', 'wv'
 }
 
 EXTENSIONS_IMAGES = Set {
-    'avif', 'bmp', 'gif', 'j2k', 'jp2', 'jpeg', 'jpg', 'jxl', 'png',
-    'svg', 'tga', 'tif', 'tiff', 'webp'
+    'avif', 'bmp', 'gif', 'heic', 'heif', 'j2k', 'jp2', 'jpeg', 'jpg',
+    'jxl', 'png', 'qoi', 'svg', 'tga', 'tif', 'tiff', 'webp'
 }
 
 function split_option_exts(video, audio, image)
